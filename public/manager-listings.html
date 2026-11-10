@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>My Listings · PRMS</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<header id="topbar"></header>
+<div class="shell">
+  <nav id="sidebar" class="sidebar"></nav>
+  <main class="content">
+    <div class="page-head">
+      <div>
+        <h1 class="page-title">My Listings</h1>
+        <p class="subtitle">Listings for the units you manage. Inactive listings are hidden from tenants.</p>
+      </div>
+      <a class="btn" href="listing-form.html">+ Create listing</a>
+    </div>
+
+    <div id="alert"></div>
+    <!-- Task 14: "My Listings" table showing status; Task 27: Deactivate button -->
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Property / Unit</th><th class="num">Rent</th><th>Beds</th><th>Status</th><th>Pending apps</th><th>Created</th><th>Actions</th></tr></thead>
+        <tbody id="rows"><tr><td colspan="7" class="empty">Loading…</td></tr></tbody>
+      </table>
+    </div>
+  </main>
+</div>
+
+<script src="js/common.js"></script>
+<script>
+  let listings = [];
+
+  function actions(l) {
+    if (l.status === 'Leased') return '<span class="muted small">Leased</span>';
+    const toggle = l.status === 'Active'
+      ? `<button class="btn danger sm" data-id="${l.id}" data-status="Inactive">Deactivate</button>`
+      : `<button class="btn success sm" data-id="${l.id}" data-status="Active">Activate</button>`;
+    return `<a class="btn secondary sm" href="listing-form.html?id=${l.id}">Edit</a> ${toggle}`;
+  }
+
+  async function load() {
+    listings = (await api('GET', '/api/listings/mine')).listings;
+    document.getElementById('rows').innerHTML = listings.length ? listings.map((l) => `<tr>
+      <td><strong>${esc(l.address)}</strong><div class="muted small">Unit ${esc(l.unit_number)}, ${esc(l.city)}</div></td>
+      <td class="num">${money(l.rent)}</td>
+      <td>${l.bedrooms}</td>
+      <td>${badge(l.status)}</td>
+      <td>${l.pending_apps ? `<a href="manager-applications.html">${l.pending_apps} pending</a>` : '<span class="muted">0</span>'}</td>
+      <td>${fmtDate(l.created_at)}</td>
+      <td class="actions">${actions(l)}</td>
+    </tr>`).join('') : emptyRow(7, 'No listings yet. Create one for a vacant unit.');
+  }
+
+  document.getElementById('rows').addEventListener('click', async (e) => {
+    const btn = e.target.closest('button[data-id]');
+    if (!btn) return;
+    const status = btn.dataset.status;
+    if (status === 'Inactive' && !confirm('Deactivate this listing? Tenants will no longer see it.')) return;
+    try {
+      await api('POST', `/api/listings/${btn.dataset.id}/status`, { status });
+      showAlert('alert', status === 'Inactive' ? 'Listing deactivated and hidden from tenants.' : 'Listing is active again.', 'success');
+      await load();
+    } catch (err) { showAlert('alert', err.message); }
+  });
+
+  (async () => {
+    await initPage();
+    showFlash('alert');
+    try { await load(); } catch (err) { showAlert('alert', err.message); }
+  })();
+</script>
+</body>
+</html>

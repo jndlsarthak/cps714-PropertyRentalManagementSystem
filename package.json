@@ -1,0 +1,14 @@
+{
+  "name": "property-rental-management-system",
+  "version": "1.0.0",
+  "description": "Property Rental Management System - plain HTML/CSS/JS frontend with a tiny Node.js + built-in SQLite backend",
+  "main": "server.js",
+  "private": true,
+  "scripts": {
+    "start": "node server.js",
+    "reset": "node server.js --reset"
+  },
+  "engines": {
+    "node": ">=22.13"
+  }
+}

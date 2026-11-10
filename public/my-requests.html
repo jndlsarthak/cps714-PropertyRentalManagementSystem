@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>My Requests · PRMS</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<header id="topbar"></header>
+<div class="shell">
+  <nav id="sidebar" class="sidebar"></nav>
+  <main class="content">
+    <div class="page-head">
+      <div>
+        <h1 class="page-title">My Maintenance Requests</h1>
+        <p class="subtitle">Submitted → Assigned → Completed</p>
+      </div>
+      <a class="btn" href="maintenance-new.html">+ New request</a>
+    </div>
+
+    <div id="alert"></div>
+    <!-- Task 39: My Requests page with status -->
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Issue</th><th>Unit</th><th>Urgency</th><th>Status</th><th>Assigned to</th><th>Submitted</th><th>Completed</th></tr></thead>
+        <tbody id="rows"><tr><td colspan="7" class="empty">Loading…</td></tr></tbody>
+      </table>
+    </div>
+  </main>
+</div>
+
+<script src="js/common.js"></script>
+<script>
+  (async () => {
+    await initPage();
+    showFlash('alert');
+    try {
+      const { requests } = await api('GET', '/api/maintenance/mine');
+      document.getElementById('rows').innerHTML = requests.length ? requests.map((r) => `<tr>
+        <td><strong>${esc(r.title)}</strong><div class="muted small" style="max-width:320px">${esc(r.description)}</div></td>
+        <td>${esc(r.address)}<div class="muted small">Unit ${esc(r.unit_number)}</div></td>
+        <td>${badge(r.urgency)}</td>
+        <td>${badge(r.status)}</td>
+        <td>${r.assignee_name ? `${esc(r.assignee_name)}<div class="muted small">${esc(ROLE_LABELS[r.assignee_role])}</div>` : '<span class="muted">Not yet</span>'}</td>
+        <td>${fmtDate(r.created_at)}</td>
+        <td>${fmtDate(r.completed_at)}</td>
+      </tr>`).join('') : emptyRow(7, 'You have not submitted any maintenance requests.');
+    } catch (err) { showAlert('alert', err.message); }
+  })();
+</script>
+</body>
+</html>

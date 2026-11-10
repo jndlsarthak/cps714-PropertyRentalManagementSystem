@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Maintenance Spending · PRMS</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<header id="topbar"></header>
+<div class="shell">
+  <nav id="sidebar" class="sidebar"></nav>
+  <main class="content">
+    <div class="page-head">
+      <div>
+        <h1 class="page-title">Maintenance Spending</h1>
+        <p class="subtitle">Total spent on completed maintenance jobs, per property. A job's final price is its most recent quote.</p>
+      </div>
+    </div>
+
+    <div id="alert"></div>
+    <!-- Task 49: spending report table (property, total spent) -->
+    <h2>By property</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Property</th><th>City</th><th class="num">Completed jobs</th><th class="num">Total spent</th></tr></thead>
+        <tbody id="rows"><tr><td colspan="4" class="empty">Loading…</td></tr></tbody>
+        <tfoot id="total"></tfoot>
+      </table>
+    </div>
+
+    <h2>Completed jobs</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Completed</th><th>Job</th><th>Property / Unit</th><th>Done by</th><th class="num">Cost</th></tr></thead>
+        <tbody id="jobs"><tr><td colspan="5" class="empty">Loading…</td></tr></tbody>
+      </table>
+    </div>
+  </main>
+</div>
+
+<script src="js/common.js"></script>
+<script>
+  (async () => {
+    await initPage();
+    try {
+      const { properties, jobs } = await api('GET', '/api/owner/spending');
+      document.getElementById('rows').innerHTML = properties.length ? properties.map((p) => `<tr>
+        <td><strong>${esc(p.address)}</strong></td>
+        <td>${esc(p.city)}</td>
+        <td class="num">${p.completed_jobs}</td>
+        <td class="num">${money(p.total_spent)}</td>
+      </tr>`).join('') : emptyRow(4, 'You have no properties yet.');
+
+      const total = properties.reduce((sum, p) => sum + p.total_spent, 0);
+      const count = properties.reduce((sum, p) => sum + p.completed_jobs, 0);
+      if (properties.length) {
+        document.getElementById('total').innerHTML = `<tr><td colspan="2">Total</td><td class="num">${count}</td><td class="num">${money(total)}</td></tr>`;
+      }
+
+      document.getElementById('jobs').innerHTML = jobs.length ? jobs.map((j) => `<tr>
+        <td>${fmtDate(j.completed_at)}</td>
+        <td>${esc(j.title)}</td>
+        <td>${esc(j.address)} <span class="muted small">· Unit ${esc(j.unit_number)}</span></td>
+        <td>${esc(j.done_by || '—')} <span class="muted small">${esc(ROLE_LABELS[j.done_by_role] || '')}</span></td>
+        <td class="num">${j.amount != null ? money(j.amount) : '—'}</td>
+      </tr>`).join('') : emptyRow(5, 'No completed maintenance jobs yet.');
+    } catch (err) { showAlert('alert', err.message); }
+  })();
+</script>
+</body>
+</html>

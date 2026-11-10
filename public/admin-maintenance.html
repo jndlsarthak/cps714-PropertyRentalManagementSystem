@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>All Maintenance Requests · PRMS</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<header id="topbar"></header>
+<div class="shell">
+  <nav id="sidebar" class="sidebar"></nav>
+  <main class="content">
+    <div class="page-head">
+      <div>
+        <h1 class="page-title">All Maintenance Requests</h1>
+        <p class="subtitle">Maintenance activity across the whole system.</p>
+      </div>
+    </div>
+
+    <div class="tabs" id="tabs"></div>
+    <div id="alert"></div>
+    <!-- Task 46: Admin "All Maintenance Requests" table -->
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>#</th><th>Issue</th><th>Property / Unit</th><th>Tenant</th><th>Urgency</th><th>Status</th><th>Assigned to</th><th class="num">Quote</th><th>Submitted</th><th>Completed</th></tr></thead>
+        <tbody id="rows"><tr><td colspan="10" class="empty">Loading…</td></tr></tbody>
+      </table>
+    </div>
+  </main>
+</div>
+
+<script src="js/common.js"></script>
+<script>
+  let requests = [], filter = '';
+  const STATUSES = ['', 'Submitted', 'Assigned', 'Completed'];
+
+  function render() {
+    document.getElementById('tabs').innerHTML = STATUSES.map((s) => {
+      const n = s ? requests.filter((r) => r.status === s).length : requests.length;
+      return `<button class="tab ${s === filter ? 'active' : ''}" data-s="${s}">${s || 'All'} (${n})</button>`;
+    }).join('');
+    const list = requests.filter((r) => !filter || r.status === filter);
+    document.getElementById('rows').innerHTML = list.length ? list.map((r) => `<tr>
+      <td>${r.id}</td>
+      <td><strong>${esc(r.title)}</strong></td>
+      <td>${esc(r.address)}<div class="muted small">Unit ${esc(r.unit_number)}, ${esc(r.city)}</div></td>
+      <td>${esc(r.tenant_name)}</td>
+      <td>${badge(r.urgency)}</td>
+      <td>${badge(r.status)}</td>
+      <td>${r.assignee_name ? `${esc(r.assignee_name)}<div class="muted small">${esc(ROLE_LABELS[r.assignee_role])}</div>` : '<span class="muted">—</span>'}</td>
+      <td class="num">${r.latest_quote != null ? money(r.latest_quote) : '—'}</td>
+      <td>${fmtDate(r.created_at)}</td>
+      <td>${fmtDate(r.completed_at)}</td>
+    </tr>`).join('') : emptyRow(10, 'No maintenance requests.');
+  }
+
+  document.getElementById('tabs').addEventListener('click', (e) => {
+    const t = e.target.closest('.tab');
+    if (t) { filter = t.dataset.s; render(); }
+  });
+
+  (async () => {
+    await initPage();
+    try {
+      requests = (await api('GET', '/api/admin/maintenance')).requests;
+      render();
+    } catch (err) { showAlert('alert', err.message); }
+  })();
+</script>
+</body>
+</html>

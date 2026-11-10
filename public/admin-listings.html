@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>All Listings · PRMS</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<header id="topbar"></header>
+<div class="shell">
+  <nav id="sidebar" class="sidebar"></nav>
+  <main class="content">
+    <div class="page-head">
+      <div>
+        <h1 class="page-title">All Listings</h1>
+        <p class="subtitle">Every listing across all properties.</p>
+      </div>
+    </div>
+
+    <div class="tabs" id="tabs"></div>
+    <div id="alert"></div>
+    <!-- Task 45: Admin "All Listings" table -->
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>#</th><th>Property / Unit</th><th>City</th><th class="num">Rent</th><th>Beds</th><th>Managed by</th><th>Applications</th><th>Status</th><th>Created</th></tr></thead>
+        <tbody id="rows"><tr><td colspan="9" class="empty">Loading…</td></tr></tbody>
+      </table>
+    </div>
+  </main>
+</div>
+
+<script src="js/common.js"></script>
+<script>
+  let listings = [], filter = '';
+  const STATUSES = ['', 'Active', 'Inactive', 'Leased'];
+
+  function render() {
+    document.getElementById('tabs').innerHTML = STATUSES.map((s) => {
+      const n = s ? listings.filter((l) => l.status === s).length : listings.length;
+      return `<button class="tab ${s === filter ? 'active' : ''}" data-s="${s}">${s || 'All'} (${n})</button>`;
+    }).join('');
+    const list = listings.filter((l) => !filter || l.status === filter);
+    document.getElementById('rows').innerHTML = list.length ? list.map((l) => `<tr>
+      <td>${l.id}</td>
+      <td><strong>${esc(l.address)}</strong><div class="muted small">Unit ${esc(l.unit_number)}</div></td>
+      <td>${esc(l.city)}</td>
+      <td class="num">${money(l.rent)}</td>
+      <td>${l.bedrooms}</td>
+      <td>${esc(l.manager_name)}</td>
+      <td>${l.applications}</td>
+      <td>${badge(l.status)}</td>
+      <td>${fmtDate(l.created_at)}</td>
+    </tr>`).join('') : emptyRow(9, 'No listings.');
+  }
+
+  document.getElementById('tabs').addEventListener('click', (e) => {
+    const t = e.target.closest('.tab');
+    if (t) { filter = t.dataset.s; render(); }
+  });
+
+  (async () => {
+    await initPage();
+    try {
+      listings = (await api('GET', '/api/admin/listings')).listings;
+      render();
+    } catch (err) { showAlert('alert', err.message); }
+  })();
+</script>
+</body>
+</html>

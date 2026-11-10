@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Messages · PRMS</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<header id="topbar"></header>
+<div class="shell">
+  <nav id="sidebar" class="sidebar"></nav>
+  <main class="content">
+    <div class="page-head">
+      <div>
+        <h1 class="page-title">Messages</h1>
+        <p class="subtitle" id="subtitle"></p>
+      </div>
+    </div>
+    <div id="alert"></div>
+
+    <!-- Task 51: conversation view + text box -->
+    <div class="card chat">
+      <div class="contacts" id="contacts"></div>
+      <div class="conversation">
+        <div class="conversation-head" id="convHead"><span class="muted">Select a conversation</span></div>
+        <div class="thread" id="thread"></div>
+        <form class="composer" id="composer" hidden>
+          <textarea id="body" name="body" maxlength="2000" placeholder="Write a message… (Enter to send, Shift+Enter for a new line)"></textarea>
+          <button class="btn" type="submit">Send</button>
+        </form>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script src="js/common.js"></script>
+<script>
+  let me, contacts = [], activeId = null, lastCount = -1;
+  const thread = document.getElementById('thread');
+  const composer = document.getElementById('composer');
+
+  function renderContacts() {
+    document.getElementById('contacts').innerHTML = contacts.length ? contacts.map((c) => `
+      <button class="contact ${c.id === activeId ? 'active' : ''}" data-id="${c.id}">
+        <div class="row"><strong>${esc(c.name)}</strong>${c.unread ? `<span class="badge red">${c.unread}</span>` : ''}</div>
+        <div class="muted small">${esc(ROLE_LABELS[c.role])}</div>
+        <div class="preview">${esc(c.last_body || 'No messages yet')}</div>
+      </button>`).join('')
+      : `<div class="empty small">${me.role === 'tenant'
+          ? 'No contacts yet. You can message the manager of a property you rent or have applied to.'
+          : 'No contacts yet. Tenants and applicants of your properties appear here.'}</div>`;
+  }
+
+  async function loadContacts() {
+    contacts = (await api('GET', '/api/messages/contacts')).contacts;
+    renderContacts();
+  }
+
+  // Task 53: load and display the conversation
+  async function openConversation(id, { quiet = false } = {}) {
+    const { contact, messages } = await api('GET', `/api/messages/${id}`);
+    if (activeId !== id) lastCount = -1;
+    activeId = id;
+    document.getElementById('convHead').innerHTML = `<strong>${esc(contact.name)}</strong> <span class="muted small">· ${esc(ROLE_LABELS[contact.role])}</span>`;
+    composer.hidden = false;
+    if (messages.length !== lastCount) {
+      thread.innerHTML = messages.length ? messages.map((m) => `
+        <div class="bubble ${m.sender_id === me.id ? 'mine' : ''}">${esc(m.body)}<time>${fmtDateTime(m.sent_at)}</time></div>`).join('')
+        : '<div class="empty">No messages yet. Say hello!</div>';
+      thread.scrollTop = thread.scrollHeight;
+      lastCount = messages.length;
+    }
+    const c = contacts.find((x) => x.id === id);
+    if (c && c.unread) { c.unread = 0; renderLayout((await api('GET', '/api/me')).user); }
+    if (!quiet) { renderContacts(); document.getElementById('body').focus(); }
+  }
+
+  document.getElementById('contacts').addEventListener('click', (e) => {
+    const btn = e.target.closest('.contact');
+    if (btn) openConversation(Number(btn.dataset.id)).catch((err) => showAlert('alert', err.message));
+  });
+
+  // Task 52: save the message (sender, receiver, text, time)
+  composer.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const body = document.getElementById('body').value.trim();
+    if (!body || !activeId) return;
+    try {
+      await api('POST', '/api/messages', { receiver_id: activeId, body });
+      document.getElementById('body').value = '';
+      await openConversation(activeId, { quiet: true });
+      await loadContacts();
+    } catch (err) { showAlert('alert', err.message); }
+  });
+  document.getElementById('body').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); composer.requestSubmit(); }
+  });
+
+  (async () => {
+    me = await initPage();
+    document.getElementById('subtitle').textContent = me.role === 'tenant'
+      ? 'Message your property manager directly.'
+      : 'Conversations with your tenants and applicants.';
+    try {
+      await loadContacts();
+      const withId = Number(param('with'));
+      if (withId && contacts.some((c) => c.id === withId)) await openConversation(withId);
+      else if (contacts.length && window.innerWidth > 860) await openConversation(contacts[0].id);
+    } catch (err) { showAlert('alert', err.message); }
+
+    // Check for new messages every 5 seconds
+    setInterval(() => {
+      if (document.hidden) return;
+      if (activeId) openConversation(activeId, { quiet: true }).catch(() => {});
+      loadContacts().catch(() => {});
+    }, 5000);
+  })();
+</script>
+</body>
+</html>

@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Browse Listings · PRMS</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<header id="topbar"></header>
+<div class="shell">
+  <nav id="sidebar" class="sidebar"></nav>
+  <main class="content">
+    <div class="page-head">
+      <div>
+        <h1 class="page-title">Browse Listings</h1>
+        <p class="subtitle">Find your next home. Filter by location, price and bedrooms.</p>
+      </div>
+    </div>
+
+    <!-- Task 17: filter bar (location, max price, bedrooms) -->
+    <form class="card filter-bar" id="filters">
+      <div class="field">
+        <label for="location">Location</label>
+        <input id="location" name="location" list="cityList" placeholder="City or street">
+        <datalist id="cityList"></datalist>
+      </div>
+      <div class="field">
+        <label for="max_price">Max rent ($/month)</label>
+        <input id="max_price" name="max_price" type="number" min="0" step="50" placeholder="Any">
+      </div>
+      <div class="field">
+        <label for="bedrooms">Bedrooms</label>
+        <select id="bedrooms" name="bedrooms">
+          <option value="">Any</option>
+          <option value="1">1+</option><option value="2">2+</option>
+          <option value="3">3+</option><option value="4">4+</option>
+        </select>
+      </div>
+      <div class="form-actions" style="margin:0">
+        <button class="btn" type="submit">Search</button>
+        <button class="btn secondary" type="reset">Reset</button>
+      </div>
+    </form>
+
+    <div id="alert"></div>
+    <p class="muted" id="count"></p>
+    <!-- Task 15: listing cards -->
+    <div class="listing-grid" id="grid"></div>
+  </main>
+</div>
+
+<script src="js/common.js"></script>
+<script>
+  const form = document.getElementById('filters');
+
+  // Tasks 16 & 18: load active listings; filters are applied in the database query
+  async function search() {
+    const data = formData(form);
+    const qs = new URLSearchParams(Object.entries(data).filter(([, v]) => v !== '')).toString();
+    try {
+      const { listings, cities } = await api('GET', '/api/listings' + (qs ? '?' + qs : ''));
+      document.getElementById('cityList').innerHTML = cities.map((c) => `<option value="${esc(c)}">`).join('');
+      document.getElementById('count').textContent = `${listings.length} listing${listings.length === 1 ? '' : 's'} found`;
+      document.getElementById('grid').innerHTML = listings.length ? listings.map((l) => `
+        <div class="listing-card">
+          ${photo(l.image_url, l.address)}
+          <div class="body">
+            <div class="price">${money(l.rent)} <small>/ month</small></div>
+            <div class="addr">${esc(l.address)}, Unit ${esc(l.unit_number)}</div>
+            <div class="muted small">${esc(l.city)} · ${esc(l.type)} · ${l.bedrooms ? l.bedrooms + ' bed' + (l.bedrooms > 1 ? 's' : '') : 'Studio'}</div>
+            <div class="desc">${esc(l.description)}</div>
+            <a class="btn block" href="listing.html?id=${l.id}">View &amp; apply</a>
+          </div>
+        </div>`).join('') : '<div class="card empty" style="grid-column:1/-1">No listings match your filters. Try widening your search.</div>';
+    } catch (err) { showAlert('alert', err.message); }
+  }
+
+  form.addEventListener('submit', (e) => { e.preventDefault(); search(); });
+  form.addEventListener('reset', () => setTimeout(search, 0));
+
+  (async () => {
+    await initPage();
+    search();
+  })();
+</script>
+</body>
+</html>

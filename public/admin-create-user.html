@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Create User · PRMS</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<header id="topbar"></header>
+<div class="shell">
+  <nav id="sidebar" class="sidebar"></nav>
+  <main class="content">
+    <div class="page-head">
+      <div>
+        <h1 class="page-title">Create User</h1>
+        <p class="subtitle">Create an account and assign its role.</p>
+      </div>
+    </div>
+
+    <!-- Task 3: Create User form -->
+    <div class="card narrow">
+      <div id="alert"></div>
+      <form id="userForm" novalidate>
+        <div class="field">
+          <label for="name">Full name</label>
+          <input id="name" name="name" maxlength="100" placeholder="e.g. Jane Smith">
+        </div>
+        <div class="field">
+          <label for="email">Email</label>
+          <input id="email" name="email" type="email" maxlength="200" placeholder="jane@example.com">
+        </div>
+        <div class="field">
+          <label for="password">Password</label>
+          <input id="password" name="password" type="password" autocomplete="new-password">
+          <div class="hint">At least 6 characters.</div>
+        </div>
+        <div class="field">
+          <label for="role">Role</label>
+          <select id="role" name="role">
+            <option value="">Select a role…</option>
+            <option value="admin">Admin</option>
+            <option value="owner">Landlord / Owner</option>
+            <option value="manager">Property Manager</option>
+            <option value="tenant">Tenant</option>
+            <option value="staff">Maintenance Staff</option>
+            <option value="contractor">Contractor</option>
+          </select>
+        </div>
+        <div class="form-actions">
+          <button class="btn" type="submit" id="saveBtn">Create user</button>
+          <a class="btn secondary" href="admin-users.html">View all users</a>
+        </div>
+      </form>
+    </div>
+  </main>
+</div>
+
+<script src="js/common.js"></script>
+<script>
+  initPage();
+  const form = document.getElementById('userForm');
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    showAlert('alert', '');
+    const data = formData(form);
+
+    // Task 5: required fields + format checks (the server also checks the email is unique)
+    const errors = {};
+    if (!data.name) errors.name = 'Name is required.';
+    if (!data.email) errors.email = 'Email is required.';
+    else if (!EMAIL_RE.test(data.email)) errors.email = 'Please enter a valid email address.';
+    if (!data.password) errors.password = 'Password is required.';
+    else if (data.password.length < 6) errors.password = 'Password must be at least 6 characters.';
+    if (!data.role) errors.role = 'Please choose a role.';
+    if (!setErrors(form, errors)) return;
+
+    await withBusy(document.getElementById('saveBtn'), async () => {
+      try {
+        const { user } = await api('POST', '/api/users', data);   // Task 4: saved with a hashed password
+        form.reset();
+        showAlert('alert', `User "${user.name}" was created as ${ROLE_LABELS[user.role]}.`, 'success');
+      } catch (err) {
+        if (/email/i.test(err.message)) setErrors(form, { email: err.message });
+        showAlert('alert', err.message);
+      }
+    });
+  });
+</script>
+</body>
+</html>

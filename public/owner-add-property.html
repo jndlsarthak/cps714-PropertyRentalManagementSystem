@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Add Property · PRMS</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<header id="topbar"></header>
+<div class="shell">
+  <nav id="sidebar" class="sidebar"></nav>
+  <main class="content">
+    <div class="page-head">
+      <div>
+        <h1 class="page-title">Add Property</h1>
+        <p class="subtitle">Register a property. Its units are created automatically.</p>
+      </div>
+    </div>
+
+    <!-- Task 9: Add Property form; Task 10: save property + units + manager choice -->
+    <div class="card narrow">
+      <div id="alert"></div>
+      <form id="propertyForm" novalidate>
+        <div class="field">
+          <label for="address">Street address</label>
+          <input id="address" name="address" maxlength="200" placeholder="e.g. 12 Maple Street">
+        </div>
+        <div class="grid-2">
+          <div class="field">
+            <label for="city">City</label>
+            <input id="city" name="city" maxlength="100" placeholder="e.g. Toronto">
+          </div>
+          <div class="field">
+            <label for="type">Property type</label>
+            <select id="type" name="type">
+              <option value="">Select…</option>
+              <option>Apartment</option><option>House</option><option>Condo</option>
+              <option>Townhouse</option><option>Duplex</option><option>Commercial</option>
+            </select>
+          </div>
+        </div>
+        <div class="field">
+          <label for="num_units">Number of units</label>
+          <input id="num_units" name="num_units" type="number" min="1" max="200" step="1" value="1">
+          <div class="hint">Units will be numbered 1, 2, 3, …</div>
+        </div>
+        <div class="field">
+          <label for="manager_id">Who will manage this property?</label>
+          <select id="manager_id" name="manager_id">
+            <option value="self">Manage myself</option>
+          </select>
+          <div class="hint">If you manage it yourself, extra menu items for listings, applications, maintenance and messages appear for you.</div>
+        </div>
+        <div class="form-actions">
+          <button class="btn" type="submit" id="saveBtn">Save property</button>
+          <a class="btn secondary" href="owner-properties.html">Cancel</a>
+        </div>
+      </form>
+    </div>
+  </main>
+</div>
+
+<script src="js/common.js"></script>
+<script>
+  const form = document.getElementById('propertyForm');
+
+  (async () => {
+    await initPage();
+    const { managers } = await api('GET', '/api/managers');
+    document.getElementById('manager_id').innerHTML += managers
+      .map((m) => `<option value="${m.id}">${esc(m.name)} (${esc(m.email)})</option>`).join('');
+  })();
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    showAlert('alert', '');
+    const data = formData(form);
+    const errors = {};
+    if (!data.address) errors.address = 'Address is required.';
+    if (!data.city) errors.city = 'City is required.';
+    if (!data.type) errors.type = 'Please choose a property type.';
+    const n = Number(data.num_units);
+    if (!Number.isInteger(n) || n < 1 || n > 200) errors.num_units = 'Enter a whole number between 1 and 200.';
+    if (!setErrors(form, errors)) return;
+
+    await withBusy(document.getElementById('saveBtn'), async () => {
+      try {
+        await api('POST', '/api/properties', data);
+        flash(`Property "${data.address}" was added with ${n} unit${n > 1 ? 's' : ''}.`);
+        location.href = 'owner-properties.html';
+      } catch (err) {
+        showAlert('alert', err.message);
+      }
+    });
+  });
+</script>
+</body>
+</html>

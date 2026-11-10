@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>New Maintenance Request · PRMS</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<header id="topbar"></header>
+<div class="shell">
+  <nav id="sidebar" class="sidebar"></nav>
+  <main class="content">
+    <div class="page-head">
+      <div>
+        <h1 class="page-title">New Maintenance Request</h1>
+        <p class="subtitle">Describe the issue and your property manager will arrange a fix.</p>
+      </div>
+    </div>
+
+    <!-- Task 28: request form (issue title, description, urgency) -->
+    <div class="card narrow">
+      <div id="alert"></div>
+      <form id="requestForm" novalidate hidden>
+        <div class="field">
+          <label for="lease_id">Unit</label>
+          <select id="lease_id" name="lease_id"></select>
+        </div>
+        <div class="field">
+          <label for="title">Issue title</label>
+          <input id="title" name="title" maxlength="150" placeholder="e.g. Leaking kitchen faucet">
+        </div>
+        <div class="field">
+          <label for="description">Description</label>
+          <textarea id="description" name="description" maxlength="2000" placeholder="What is wrong, where is it, and since when?"></textarea>
+        </div>
+        <div class="field">
+          <label for="urgency">Urgency</label>
+          <select id="urgency" name="urgency">
+            <option value="">Select…</option>
+            <option value="Low">Low: can wait a few days</option>
+            <option value="Medium">Medium: needs attention this week</option>
+            <option value="High">High: urgent (no heat, water leak, safety risk)</option>
+          </select>
+        </div>
+        <div class="form-actions">
+          <button class="btn" type="submit" id="saveBtn">Submit request</button>
+          <a class="btn secondary" href="my-requests.html">My requests</a>
+        </div>
+      </form>
+    </div>
+  </main>
+</div>
+
+<script src="js/common.js"></script>
+<script>
+  const form = document.getElementById('requestForm');
+
+  (async () => {
+    await initPage();
+    try {
+      const { leases } = await api('GET', '/api/tenant/leases');
+      if (!leases.length) {
+        return showAlert('alert', 'You need an active lease before you can submit maintenance requests.', 'info');
+      }
+      form.lease_id.innerHTML = leases.map((l) => `<option value="${l.id}">${esc(l.address)}, Unit ${esc(l.unit_number)}</option>`).join('');
+      form.hidden = false;
+    } catch (err) { showAlert('alert', err.message); }
+  })();
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    showAlert('alert', '');
+    const data = formData(form);
+    const errors = {};
+    if (!data.title) errors.title = 'Please give the issue a short title.';
+    if (!data.description) errors.description = 'Please describe the issue.';
+    if (!data.urgency) errors.urgency = 'Please choose an urgency.';
+    if (!setErrors(form, errors)) return;
+
+    await withBusy(document.getElementById('saveBtn'), async () => {
+      try {
+        await api('POST', '/api/maintenance', data);   // Task 29: saved with status "Submitted"
+        flash('Your maintenance request was submitted.');
+        location.href = 'my-requests.html';
+      } catch (err) { showAlert('alert', err.message); }
+    });
+  });
+</script>
+</body>
+</html>

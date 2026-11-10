@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PRMS ERD</title>
+  <link rel="stylesheet" href="css/style.css">
+  <style>
+    .erd-page { max-width: 1260px; margin: 0 auto; padding: 24px 16px 48px; }
+    .erd-wrap { overflow-x: auto; background: #fff; border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); }
+    svg { display: block; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+    .tbl rect.box { fill: #fff; stroke: #cbd5e1; }
+    .tbl rect.head { fill: #1e3a8a; }
+    .tbl text.title { fill: #fff; font-weight: 700; font-size: 13px; }
+    .tbl text.col { font-size: 12px; fill: #1f2937; }
+    .tbl text.type { font-size: 11px; fill: #94a3b8; }
+    .tbl text.key { font-size: 10px; font-weight: 700; }
+    .tbl text.pk { fill: #b45309; }
+    .tbl text.fk { fill: #2563eb; }
+    .tbl { cursor: pointer; }
+    .rel path { fill: none; stroke: #94a3b8; stroke-width: 1.3; }
+    .rel text { font-size: 11px; font-weight: 700; fill: #64748b; }
+    svg.focus .rel { opacity: .1; }
+    svg.focus .tbl { opacity: .35; }
+    svg.focus .rel.on { opacity: 1; }
+    svg.focus .rel.on path { stroke: #2563eb; stroke-width: 2; }
+    svg.focus .rel.on text { fill: #2563eb; }
+    svg.focus .tbl.on { opacity: 1; }
+    .legend { display: flex; gap: 18px; flex-wrap: wrap; font-size: 13px; color: var(--muted); margin: 10px 0 16px; }
+    .legend b { color: #b45309; } .legend i { color: #2563eb; font-style: normal; font-weight: 700; }
+  </style>
+</head>
+<body>
+<div class="erd-page">
+  <div class="page-head">
+    <div>
+      <h1 class="page-title">Entity Relationship Diagram</h1>
+      <p class="subtitle">Property Rental Management System: database design (SQLite). Hover over a table to highlight its relationships.</p>
+    </div>
+    <a class="btn secondary" href="index.html">← Back to app</a>
+  </div>
+  <div class="legend">
+    <span><b>PK</b> primary key</span>
+    <span><i>FK</i> foreign key</span>
+    <span><strong>1</strong> … <strong>N</strong> one-to-many</span>
+    <span>Full schema: <code>db/schema.sql</code></span>
+  </div>
+  <div class="erd-wrap"><svg id="erd"></svg></div>
+
+  <div class="card" style="margin-top:20px">
+    <h2>Allowed values (CHECK constraints)</h2>
+    <div class="table-wrap" style="box-shadow:none;margin:0">
+      <table>
+        <thead><tr><th>Column</th><th>Values</th></tr></thead>
+        <tbody>
+          <tr><td>users.role</td><td>admin, owner, manager, tenant, staff, contractor</td></tr>
+          <tr><td>users.status</td><td>Active, Suspended</td></tr>
+          <tr><td>properties.manager_id</td><td>NULL means the owner manages the property themselves</td></tr>
+          <tr><td>units.status</td><td>Vacant, Occupied</td></tr>
+          <tr><td>listings.status</td><td>Active, Inactive, Leased</td></tr>
+          <tr><td>applications.status</td><td>Pending, Approved, Declined (one application per tenant per listing)</td></tr>
+          <tr><td>leases.status</td><td>Active, Ended</td></tr>
+          <tr><td>maintenance_requests.urgency</td><td>Low, Medium, High</td></tr>
+          <tr><td>maintenance_requests.status</td><td>Submitted, Assigned, Completed</td></tr>
+          <tr><td>payments.type / status</td><td>Rent, Deposit / Paid</td></tr>
+          <tr><td>reviews.rating</td><td>1 to 5 (one review per completed job)</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script>
+  // ---- Tables (kept in sync with db/schema.sql) ----
+  // [column, type, key] where key is 'PK', 'FK' or ''
+  const TABLES = {
+    properties: [['id', 'INTEGER', 'PK'], ['owner_id', 'INTEGER', 'FK'], ['manager_id', 'INTEGER', 'FK'], ['address', 'TEXT'], ['city', 'TEXT'], ['type', 'TEXT'], ['num_units', 'INTEGER'], ['created_at', 'TEXT']],
+    units: [['id', 'INTEGER', 'PK'], ['property_id', 'INTEGER', 'FK'], ['unit_number', 'TEXT'], ['status', 'TEXT']],
+    listings: [['id', 'INTEGER', 'PK'], ['unit_id', 'INTEGER', 'FK'], ['created_by', 'INTEGER', 'FK'], ['rent', 'REAL'], ['bedrooms', 'INTEGER'], ['description', 'TEXT'], ['image_url', 'TEXT'], ['status', 'TEXT'], ['created_at', 'TEXT'], ['updated_at', 'TEXT']],
+    applications: [['id', 'INTEGER', 'PK'], ['listing_id', 'INTEGER', 'FK'], ['tenant_id', 'INTEGER', 'FK'], ['income', 'REAL'], ['employer', 'TEXT'], ['move_in_date', 'TEXT'], ['message', 'TEXT'], ['status', 'TEXT'], ['created_at', 'TEXT'], ['decided_at', 'TEXT']],
+    users: [['id', 'INTEGER', 'PK'], ['name', 'TEXT'], ['email', 'TEXT (unique)'], ['password_hash', 'TEXT'], ['role', 'TEXT'], ['status', 'TEXT'], ['created_at', 'TEXT']],
+    sessions: [['token', 'TEXT', 'PK'], ['user_id', 'INTEGER', 'FK'], ['created_at', 'TEXT']],
+    messages: [['id', 'INTEGER', 'PK'], ['sender_id', 'INTEGER', 'FK'], ['receiver_id', 'INTEGER', 'FK'], ['body', 'TEXT'], ['sent_at', 'TEXT'], ['read_at', 'TEXT']],
+    leases: [['id', 'INTEGER', 'PK'], ['unit_id', 'INTEGER', 'FK'], ['tenant_id', 'INTEGER', 'FK'], ['application_id', 'INTEGER', 'FK'], ['start_date', 'TEXT'], ['end_date', 'TEXT'], ['monthly_rent', 'REAL'], ['deposit', 'REAL'], ['status', 'TEXT'], ['created_at', 'TEXT']],
+    payments: [['id', 'INTEGER', 'PK'], ['tenant_id', 'INTEGER', 'FK'], ['lease_id', 'INTEGER', 'FK'], ['amount', 'REAL'], ['type', 'TEXT'], ['card_last4', 'TEXT'], ['reference', 'TEXT'], ['status', 'TEXT'], ['paid_at', 'TEXT']],
+    maintenance_requests: [['id', 'INTEGER', 'PK'], ['unit_id', 'INTEGER', 'FK'], ['tenant_id', 'INTEGER', 'FK'], ['assigned_to', 'INTEGER', 'FK'], ['title', 'TEXT'], ['description', 'TEXT'], ['urgency', 'TEXT'], ['status', 'TEXT'], ['assigned_at', 'TEXT'], ['completed_at', 'TEXT'], ['created_at', 'TEXT']],
+    quotes: [['id', 'INTEGER', 'PK'], ['request_id', 'INTEGER', 'FK'], ['submitted_by', 'INTEGER', 'FK'], ['amount', 'REAL'], ['notes', 'TEXT'], ['created_at', 'TEXT']],
+    reviews: [['id', 'INTEGER', 'PK'], ['request_id', 'INTEGER', 'FK'], ['contractor_id', 'INTEGER', 'FK'], ['reviewer_id', 'INTEGER', 'FK'], ['rating', 'INTEGER'], ['comment', 'TEXT'], ['created_at', 'TEXT']],
+  };
+
+  // ---- Relationships: [fromTable, fkColumn, toTable] (many -> one) ----
+  const RELS = [
+    ['properties', 'owner_id', 'users'], ['properties', 'manager_id', 'users'],
+    ['units', 'property_id', 'properties'],
+    ['listings', 'unit_id', 'units'], ['listings', 'created_by', 'users'],
+    ['applications', 'listing_id', 'listings'], ['applications', 'tenant_id', 'users'],
+    ['sessions', 'user_id', 'users'],
+    ['messages', 'sender_id', 'users'], ['messages', 'receiver_id', 'users'],
+    ['leases', 'unit_id', 'units'], ['leases', 'tenant_id', 'users'], ['leases', 'application_id', 'applications'],
+    ['payments', 'tenant_id', 'users'], ['payments', 'lease_id', 'leases'],
+    ['maintenance_requests', 'unit_id', 'units'], ['maintenance_requests', 'tenant_id', 'users'], ['maintenance_requests', 'assigned_to', 'users'],
+    ['quotes', 'request_id', 'maintenance_requests'], ['quotes', 'submitted_by', 'users'],
+    ['reviews', 'request_id', 'maintenance_requests'], ['reviews', 'contractor_id', 'users'], ['reviews', 'reviewer_id', 'users'],
+  ];
+
+  // ---- Layout: tables stacked in 4 columns ----
+  const COLUMNS = [
+    ['properties', 'units', 'listings', 'applications'],
+    ['users', 'sessions', 'messages'],
+    ['maintenance_requests', 'quotes', 'reviews'],
+    ['leases', 'payments'],
+  ];
+  const W = 220, HEAD = 28, ROW = 20, GAP_Y = 34, COL_X = [56, 366, 676, 986], TOP = 24;
+  const pos = {};
+  COLUMNS.forEach((names, c) => {
+    let y = TOP;
+    for (const name of names) {
+      const h = HEAD + TABLES[name].length * ROW + 6;
+      pos[name] = { x: COL_X[c], y, h, col: c };
+      y += h + GAP_Y;
+    }
+  });
+  const width = COL_X[3] + W + 60;
+  const height = Math.max(...Object.values(pos).map((p) => p.y + p.h)) + 30;
+
+  const NS = 'http://www.w3.org/2000/svg';
+  const svg = document.getElementById('erd');
+  svg.setAttribute('width', '100%');
+  svg.style.minWidth = '900px';
+  svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
+  const el = (tag, attrs, parent, text) => {
+    const n = document.createElementNS(NS, tag);
+    for (const k in attrs) n.setAttribute(k, attrs[k]);
+    if (text !== undefined) n.textContent = text;
+    parent.appendChild(n);
+    return n;
+  };
+  const rowY = (table, col) => {
+    const i = TABLES[table].findIndex((c) => c[0] === col);
+    return pos[table].y + HEAD + i * ROW + ROW / 2 + 3;
+  };
+
+  // ---- Relationship lines (drawn first so tables sit on top) ----
+  const relLayer = el('g', {}, svg);
+  RELS.forEach(([from, fk, to]) => {
+    const a = pos[from], b = pos[to];
+    const y1 = rowY(from, fk), y2 = rowY(to, TABLES[to][0][0]);
+    let x1, x2, d;
+    if (a.col === b.col) {                     // same column: loop out on the left
+      x1 = a.x; x2 = b.x;
+      const bend = 40;
+      d = `M${x1},${y1} C${x1 - bend},${y1} ${x2 - bend},${y2} ${x2},${y2}`;
+    } else {
+      const right = b.col > a.col;
+      x1 = right ? a.x + W : a.x;
+      x2 = right ? b.x : b.x + W;
+      const mid = (x1 + x2) / 2;
+      d = `M${x1},${y1} C${mid},${y1} ${mid},${y2} ${x2},${y2}`;
+    }
+    const g = el('g', { class: 'rel', 'data-a': from, 'data-b': to }, relLayer);
+    el('path', { d }, g);
+    const dir1 = x1 === a.x ? -1 : 1, dir2 = x2 === b.x ? -1 : 1;
+    el('text', { x: x1 + dir1 * 9, y: y1 - 3, 'text-anchor': 'middle' }, g, 'N');
+    el('text', { x: x2 + dir2 * 8, y: y2 - 3, 'text-anchor': 'middle' }, g, '1');
+  });
+
+  // ---- Tables ----
+  for (const [name, cols] of Object.entries(TABLES)) {
+    const p = pos[name];
+    const g = el('g', { class: 'tbl', 'data-t': name }, svg);
+    el('rect', { class: 'box', x: p.x, y: p.y, width: W, height: p.h, rx: 8 }, g);
+    el('rect', { class: 'head', x: p.x, y: p.y, width: W, height: HEAD, rx: 8 }, g);
+    el('rect', { class: 'head', x: p.x, y: p.y + HEAD - 8, width: W, height: 8 }, g);
+    el('text', { class: 'title', x: p.x + 12, y: p.y + 19 }, g, name);
+    cols.forEach(([col, type, key], i) => {
+      const y = p.y + HEAD + i * ROW + 15;
+      if (key) el('text', { class: `key ${key.toLowerCase()}`, x: p.x + 10, y }, g, key);
+      el('text', { class: 'col', x: p.x + 36, y, 'font-weight': key === 'PK' ? 700 : 400 }, g, col);
+      el('text', { class: 'type', x: p.x + W - 10, y, 'text-anchor': 'end' }, g, type);
+    });
+  }
+
+  // ---- Hover: highlight a table's relationships ----
+  svg.querySelectorAll('.tbl').forEach((t) => {
+    t.addEventListener('mouseenter', () => {
+      const name = t.dataset.t;
+      svg.classList.add('focus');
+      t.classList.add('on');
+      svg.querySelectorAll('.rel').forEach((r) => {
+        if (r.dataset.a === name || r.dataset.b === name) {
+          r.classList.add('on');
+          svg.querySelector(`.tbl[data-t="${r.dataset.a === name ? r.dataset.b : r.dataset.a}"]`).classList.add('on');
+        }
+      });
+    });
+    t.addEventListener('mouseleave', () => {
+      svg.classList.remove('focus');
+      svg.querySelectorAll('.on').forEach((n) => n.classList.remove('on'));
+    });
+  });
+</script>
+</body>
+</html>

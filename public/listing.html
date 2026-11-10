@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Listing · PRMS</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<header id="topbar"></header>
+<div class="shell">
+  <nav id="sidebar" class="sidebar"></nav>
+  <main class="content">
+    <p style="margin:0 0 14px"><a href="listings.html">← Back to listings</a></p>
+    <div id="alert"></div>
+
+    <!-- Task 19: listing detail page with application form -->
+    <div class="detail-grid" id="detail" hidden>
+      <div>
+        <div class="detail-photo" id="photo"></div>
+        <div class="card">
+          <h1 class="page-title" id="address"></h1>
+          <p class="subtitle" id="cityLine"></p>
+          <div class="facts" id="facts"></div>
+          <h3>About this place</h3>
+          <p id="description" style="white-space:pre-wrap;margin:0"></p>
+          <hr class="divider">
+          <p class="muted small" style="margin:0">Managed by <strong id="manager"></strong></p>
+        </div>
+      </div>
+
+      <div class="card" id="applyCard">
+        <h2>Apply for this unit</h2>
+        <div id="formAlert"></div>
+        <form id="applyForm" novalidate>
+          <div class="field">
+            <label for="income">Monthly income ($)</label>
+            <input id="income" name="income" type="number" min="0" step="1" placeholder="e.g. 5500">
+          </div>
+          <div class="field">
+            <label for="employer">Employer</label>
+            <input id="employer" name="employer" maxlength="150" placeholder="Company name">
+          </div>
+          <div class="field">
+            <label for="move_in_date">Desired move-in date</label>
+            <input id="move_in_date" name="move_in_date" type="date">
+          </div>
+          <div class="field">
+            <label for="message">Message to the manager <span class="muted">(optional)</span></label>
+            <textarea id="message" name="message" maxlength="1000" placeholder="Introduce yourself…"></textarea>
+          </div>
+          <button class="btn block" type="submit" id="applyBtn">Submit application</button>
+        </form>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script src="js/common.js"></script>
+<script>
+  const id = param('id');
+  const form = document.getElementById('applyForm');
+  const todayStr = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+  form.move_in_date.min = todayStr;
+
+  function showStatus(app) {
+    document.getElementById('applyCard').innerHTML = `
+      <h2>Your application</h2>
+      <p>You applied on ${fmtDate(app.created_at)}.</p>
+      <p>Status: ${badge(app.status)}</p>
+      <a class="btn secondary block" href="my-applications.html">View my applications</a>`;
+  }
+
+  (async () => {
+    await initPage();
+    try {
+      const { listing, myApplication } = await api('GET', `/api/listings/${id}`);
+      document.title = `${listing.address} · PRMS`;
+      document.getElementById('photo').innerHTML = photo(listing.image_url, listing.address);
+      document.getElementById('address').textContent = `${listing.address}, Unit ${listing.unit_number}`;
+      document.getElementById('cityLine').textContent = `${listing.city} · ${listing.type}`;
+      document.getElementById('facts').innerHTML = `
+        <div class="fact"><b>${money(listing.rent)}</b><span>per month</span></div>
+        <div class="fact"><b>${listing.bedrooms || 'Studio'}</b><span>${listing.bedrooms ? 'bedrooms' : 'layout'}</span></div>
+        <div class="fact"><b>${esc(listing.status)}</b><span>listing status</span></div>`;
+      document.getElementById('description').textContent = listing.description;
+      document.getElementById('manager').textContent = listing.manager_name;
+      document.getElementById('detail').hidden = false;
+      if (myApplication) showStatus(myApplication);
+    } catch (err) { showAlert('alert', err.message); }
+  })();
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    showAlert('formAlert', '');
+    const data = formData(form);
+    const errors = {};
+    if (data.income === '' || Number(data.income) < 0) errors.income = 'Please enter your monthly income.';
+    if (!data.employer) errors.employer = 'Employer is required.';
+    if (!data.move_in_date) errors.move_in_date = 'Please choose a move-in date.';
+    else if (data.move_in_date < todayStr) errors.move_in_date = 'Move-in date cannot be in the past.';
+    if (!setErrors(form, errors)) return;
+
+    await withBusy(document.getElementById('applyBtn'), async () => {
+      try {
+        // Task 20: saved as "Pending"; the server blocks duplicate applications
+        await api('POST', '/api/applications', { ...data, listing_id: id });
+        showStatus({ status: 'Pending', created_at: new Date().toISOString().slice(0, 19).replace('T', ' ') });
+        showAlert('alert', 'Your application was submitted. The property manager will review it soon.', 'success');
+      } catch (err) { showAlert('formAlert', err.message); }
+    });
+  });
+</script>
+</body>
+</html>

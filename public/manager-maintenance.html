@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Maintenance Requests · PRMS</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<header id="topbar"></header>
+<div class="shell">
+  <nav id="sidebar" class="sidebar"></nav>
+  <main class="content">
+    <div class="page-head">
+      <div>
+        <h1 class="page-title">Maintenance Requests</h1>
+        <p class="subtitle">Requests from tenants in your properties. Assign them, review quotes, and rate contractors.</p>
+      </div>
+    </div>
+
+    <div class="tabs" id="tabs"></div>
+    <div id="alert"></div>
+    <!-- Task 30: list page; 31: "Assign to" dropdown; 38: all quotes; 54: rating form -->
+    <div id="list"><div class="card empty">Loading…</div></div>
+  </main>
+</div>
+
+<script src="js/common.js"></script>
+<script>
+  let requests = [], workers = [], filter = '';
+  const STATUSES = ['', 'Submitted', 'Assigned', 'Completed'];
+
+  // Task 56: contractors' average rating appears in the dropdown
+  function workerLabel(w) {
+    if (w.role === 'staff') return `${w.name} (Maintenance Staff)`;
+    const rating = w.review_count ? `★ ${w.avg_rating} (${w.review_count} review${w.review_count > 1 ? 's' : ''})` : 'no ratings yet';
+    return `${w.name} (Contractor) · ${rating}`;
+  }
+
+  function assignForm(r) {
+    if (r.status === 'Completed') return '';
+    const options = workers.map((w) => `<option value="${w.id}" ${w.id === r.assigned_to ? 'selected' : ''}>${esc(workerLabel(w))}</option>`).join('');
+    return `<div class="panel">
+      <label for="assign-${r.id}">${r.assigned_to ? 'Re-assign to' : 'Assign to'}</label>
+      <div class="inline-form">
+        <select id="assign-${r.id}"><option value="">Choose staff or contractor…</option>${options}</select>
+        <button class="btn sm" data-assign="${r.id}">${r.assigned_to ? 'Re-assign' : 'Assign'}</button>
+      </div>
+    </div>`;
+  }
+
+  function quotesBlock(r) {
+    if (!r.quotes.length) return r.status === 'Submitted' ? '' : '<p class="muted small" style="margin:12px 0 0">No quotes submitted yet.</p>';
+    return `<div style="margin-top:12px"><strong class="small">Quotes</strong>
+      <ul class="quote-list">${r.quotes.map((q) => `<li>
+        <span><strong>${money(q.amount)}</strong> · ${esc(q.submitted_by_name)} <span class="muted">(${esc(ROLE_LABELS[q.submitted_by_role])})</span>
+          ${q.notes ? `<br><span class="muted">${esc(q.notes)}</span>` : ''}</span>
+        <span class="muted small">${fmtDate(q.created_at)}</span>
+      </li>`).join('')}</ul></div>`;
+  }
+
+  // Task 54: rating form only on completed contractor jobs
+  function ratingBlock(r) {
+    if (r.status !== 'Completed' || r.assignee_role !== 'contractor') return '';
+    if (r.review_rating) {
+      return `<div class="panel"><strong class="small">Your rating:</strong> ${stars(r.review_rating)}
+        ${r.review_comment ? `<span class="muted small"> · "${esc(r.review_comment)}"</span>` : ''}</div>`;
+    }
+    return `<form class="panel" data-review="${r.id}">
+      <strong class="small">Rate ${esc(r.assignee_name)}</strong>
+      <div class="grid-2" style="margin-top:8px">
+        <div class="field">
+          <label>Rating</label>
+          <select name="rating">
+            <option value="">Choose…</option>
+            <option value="5">★★★★★ 5 - Excellent</option>
+            <option value="4">★★★★ 4 - Good</option>
+            <option value="3">★★★ 3 - Okay</option>
+            <option value="2">★★ 2 - Poor</option>
+            <option value="1">★ 1 - Very poor</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Comment <span class="muted">(optional)</span></label>
+          <input name="comment" maxlength="1000" placeholder="How did the job go?">
+        </div>
+      </div>
+      <button class="btn sm" type="submit">Submit rating</button>
+    </form>`;
+  }
+
+  function render() {
+    document.getElementById('tabs').innerHTML = STATUSES.map((s) => {
+      const n = s ? requests.filter((r) => r.status === s).length : requests.length;
+      return `<button class="tab ${s === filter ? 'active' : ''}" data-s="${s}">${s || 'All'} (${n})</button>`;
+    }).join('');
+
+    const list = requests.filter((r) => !filter || r.status === filter);
+    document.getElementById('list').innerHTML = list.length ? list.map((r) => `<div class="card">
+      <div class="card-head">
+        <div><h3>${esc(r.title)}</h3></div>
+        <div>${badge(r.urgency)} ${badge(r.status)}</div>
+      </div>
+      <div class="meta">
+        <span>${esc(r.address)}, Unit ${esc(r.unit_number)}</span>
+        <span>Tenant: ${esc(r.tenant_name)} · <a href="messages.html?with=${r.tenant_id}">Message</a></span>
+        <span>Submitted ${fmtDate(r.created_at)}</span>
+        ${r.assignee_name ? `<span>Assigned to: <strong>${esc(r.assignee_name)}</strong> (${esc(ROLE_LABELS[r.assignee_role])})</span>` : ''}
+        ${r.completed_at ? `<span>Completed ${fmtDate(r.completed_at)}</span>` : ''}
+      </div>
+      <p style="margin:0">${esc(r.description)}</p>
+      ${quotesBlock(r)}
+      ${assignForm(r)}
+      ${ratingBlock(r)}
+    </div>`).join('') : '<div class="card empty">No maintenance requests here.</div>';
+  }
+
+  async function load() {
+    requests = (await api('GET', '/api/maintenance/managed')).requests;
+    render();
+  }
+
+  document.getElementById('tabs').addEventListener('click', (e) => {
+    const t = e.target.closest('.tab');
+    if (t) { filter = t.dataset.s; render(); }
+  });
+
+  // Task 32: save the assignment -> status "Assigned"
+  document.getElementById('list').addEventListener('click', async (e) => {
+    const btn = e.target.closest('button[data-assign]');
+    if (!btn) return;
+    const id = btn.dataset.assign;
+    const assignee = document.getElementById(`assign-${id}`).value;
+    if (!assignee) return showAlert('alert', 'Please choose who to assign the request to.');
+    try {
+      await api('POST', `/api/maintenance/${id}/assign`, { assignee_id: assignee });
+      showAlert('alert', 'Request assigned. Its status is now "Assigned".', 'success');
+      await load();
+    } catch (err) { showAlert('alert', err.message); }
+  });
+
+  // Task 55: save the rating
+  document.getElementById('list').addEventListener('submit', async (e) => {
+    const form = e.target.closest('form[data-review]');
+    if (!form) return;
+    e.preventDefault();
+    const data = formData(form);
+    if (!setErrors(form, data.rating ? {} : { rating: 'Please choose a rating.' })) return;
+    try {
+      await api('POST', `/api/maintenance/${form.dataset.review}/review`, data);
+      showAlert('alert', 'Thanks! Your rating was saved.', 'success');
+      workers = (await api('GET', '/api/workers')).workers;
+      await load();
+    } catch (err) { showAlert('alert', err.message); }
+  });
+
+  (async () => {
+    await initPage();
+    try {
+      workers = (await api('GET', '/api/workers')).workers;
+      await load();
+    } catch (err) { showAlert('alert', err.message); }
+  })();
+</script>
+</body>
+</html>

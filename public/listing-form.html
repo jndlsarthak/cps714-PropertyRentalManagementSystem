@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Listing · PRMS</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<header id="topbar"></header>
+<div class="shell">
+  <nav id="sidebar" class="sidebar"></nav>
+  <main class="content">
+    <div class="page-head">
+      <div>
+        <h1 class="page-title" id="title">Create Listing</h1>
+        <p class="subtitle" id="subtitle">Publish a listing for one of your vacant units.</p>
+      </div>
+    </div>
+
+    <!-- Task 12: Create Listing form; Task 25: same form pre-filled for editing -->
+    <div class="detail-grid">
+      <div class="card">
+        <div id="alert"></div>
+        <form id="listingForm" novalidate>
+          <div class="field">
+            <label for="unit_id">Unit</label>
+            <select id="unit_id" name="unit_id"><option value="">Loading units…</option></select>
+            <div class="hint" id="unitHint">Only vacant units without an active listing are shown.</div>
+          </div>
+          <div class="grid-2">
+            <div class="field">
+              <label for="rent">Monthly rent ($)</label>
+              <input id="rent" name="rent" type="number" min="1" step="0.01" placeholder="e.g. 1850">
+            </div>
+            <div class="field">
+              <label for="bedrooms">Bedrooms</label>
+              <input id="bedrooms" name="bedrooms" type="number" min="0" max="20" step="1" placeholder="0 = studio">
+            </div>
+          </div>
+          <div class="field">
+            <label for="description">Description</label>
+            <textarea id="description" name="description" maxlength="2000" placeholder="Describe the unit, amenities, utilities included…"></textarea>
+          </div>
+          <div class="field">
+            <label for="image_url">Image URL <span class="muted">(optional)</span></label>
+            <input id="image_url" name="image_url" type="url" maxlength="500" placeholder="https://…">
+          </div>
+          <div class="form-actions">
+            <button class="btn" type="submit" id="saveBtn">Publish listing</button>
+            <button class="btn danger" type="button" id="deactivateBtn" hidden>Deactivate</button>
+            <a class="btn secondary" href="manager-listings.html">Cancel</a>
+          </div>
+        </form>
+      </div>
+      <div>
+        <div class="card" style="padding:0;overflow:hidden">
+          <div id="preview"></div>
+          <div style="padding:14px 16px" class="muted small">Image preview</div>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script src="js/common.js"></script>
+<script>
+  const form = document.getElementById('listingForm');
+  const editId = param('id');
+  let listing = null;
+
+  const preview = () => { document.getElementById('preview').innerHTML = photo(form.image_url.value.trim()); };
+  form.image_url.addEventListener('change', preview);
+
+  (async () => {
+    await initPage();
+    try {
+      if (editId) {
+        // ----- Edit mode: pre-fill the form (Task 25) -----
+        listing = (await api('GET', `/api/listings/${editId}`)).listing;
+        document.title = 'Edit Listing · PRMS';
+        document.getElementById('title').textContent = 'Edit Listing';
+        document.getElementById('subtitle').innerHTML = `${esc(listing.address)}, Unit ${esc(listing.unit_number)} · ${badge(listing.status)}`;
+        document.getElementById('saveBtn').textContent = 'Save changes';
+        form.unit_id.innerHTML = `<option value="${listing.unit_id}">${esc(listing.address)} · Unit ${esc(listing.unit_number)}</option>`;
+        form.unit_id.disabled = true;
+        document.getElementById('unitHint').textContent = 'The unit cannot be changed after a listing is created.';
+        form.rent.value = listing.rent;
+        form.bedrooms.value = listing.bedrooms;
+        form.description.value = listing.description;
+        form.image_url.value = listing.image_url || '';
+        document.getElementById('deactivateBtn').hidden = listing.status !== 'Active';
+      } else {
+        const { units } = await api('GET', '/api/managed/units');
+        const available = units.filter((u) => u.status === 'Vacant' && !u.active_listings);
+        form.unit_id.innerHTML = available.length
+          ? '<option value="">Select a unit…</option>' + available.map((u) => `<option value="${u.id}">${esc(u.address)} · Unit ${esc(u.unit_number)} (${esc(u.city)})</option>`).join('')
+          : '<option value="">No vacant units available</option>';
+      }
+      preview();
+    } catch (err) { showAlert('alert', err.message); }
+  })();
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    showAlert('alert', '');
+    const data = formData(form);
+    const errors = {};
+    if (!editId && !data.unit_id) errors.unit_id = 'Please choose a unit.';
+    if (!data.rent || Number(data.rent) <= 0) errors.rent = 'Enter a rent greater than 0.';
+    if (data.bedrooms === '' || !Number.isInteger(Number(data.bedrooms)) || Number(data.bedrooms) < 0) errors.bedrooms = 'Enter a whole number (0 for a studio).';
+    if (!data.description) errors.description = 'Description is required.';
+    if (data.image_url && !/^https?:\/\//i.test(data.image_url)) errors.image_url = 'The URL must start with http:// or https://';
+    if (!setErrors(form, errors)) return;
+
+    await withBusy(document.getElementById('saveBtn'), async () => {
+      try {
+        if (editId) {
+          await api('PUT', `/api/listings/${editId}`, data);        // Task 26: UPDATE
+          flash('Listing updated.');
+        } else {
+          await api('POST', '/api/listings', data);                  // Task 13: saved as "Active"
+          flash('Listing published. It is now visible to tenants.');
+        }
+        location.href = 'manager-listings.html';
+      } catch (err) { showAlert('alert', err.message); }
+    });
+  });
+
+  // Task 27: Deactivate -> status "Inactive", hidden from tenants
+  document.getElementById('deactivateBtn').addEventListener('click', async () => {
+    if (!confirm('Deactivate this listing? Tenants will no longer see it.')) return;
+    try {
+      await api('POST', `/api/listings/${editId}/status`, { status: 'Inactive' });
+      flash('Listing deactivated and hidden from tenants.');
+      location.href = 'manager-listings.html';
+    } catch (err) { showAlert('alert', err.message); }
+  });
+</script>
+</body>
+</html>

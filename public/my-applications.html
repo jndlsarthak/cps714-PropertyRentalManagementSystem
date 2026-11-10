@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>My Applications · PRMS</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<header id="topbar"></header>
+<div class="shell">
+  <nav id="sidebar" class="sidebar"></nav>
+  <main class="content">
+    <div class="page-head">
+      <div>
+        <h1 class="page-title">My Applications</h1>
+        <p class="subtitle">The status of every rental application you have submitted.</p>
+      </div>
+      <a class="btn" href="listings.html">Browse listings</a>
+    </div>
+
+    <div id="alert"></div>
+    <div class="stats" id="summary"></div>
+    <!-- Task 24: My Applications page with status badge -->
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Property</th><th class="num">Rent</th><th>Beds</th><th>Applied</th><th>Move-in</th><th>Status</th><th></th></tr></thead>
+        <tbody id="rows"><tr><td colspan="7" class="empty">Loading…</td></tr></tbody>
+      </table>
+    </div>
+  </main>
+</div>
+
+<script src="js/common.js"></script>
+<script>
+  const NOTE = {
+    Pending: 'Waiting for the property manager',
+    Approved: 'Your lease has been created',
+    Declined: 'Not successful this time',
+  };
+
+  (async () => {
+    await initPage();
+    try {
+      const { applications } = await api('GET', '/api/applications/mine');
+      document.getElementById('summary').innerHTML = ['Pending', 'Approved', 'Declined'].map((s) =>
+        `<div class="stat"><div class="value">${applications.filter((a) => a.status === s).length}</div><div class="label">${s}</div></div>`).join('');
+      document.getElementById('rows').innerHTML = applications.length ? applications.map((a) => `<tr>
+        <td><strong>${esc(a.address)}</strong><div class="muted small">Unit ${esc(a.unit_number)}, ${esc(a.city)}</div></td>
+        <td class="num">${money(a.rent)}</td>
+        <td>${a.bedrooms}</td>
+        <td>${fmtDate(a.created_at)}</td>
+        <td>${fmtDate(a.move_in_date)}</td>
+        <td>${badge(a.status)}<div class="muted small">${NOTE[a.status]}</div></td>
+        <td><a class="btn secondary sm" href="listing.html?id=${a.listing_id}">View</a></td>
+      </tr>`).join('') : emptyRow(7, 'You have not applied to any listings yet.');
+    } catch (err) { showAlert('alert', err.message); }
+  })();
+</script>
+</body>
+</html>

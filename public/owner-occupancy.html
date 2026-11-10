@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Occupancy & Leases · PRMS</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<header id="topbar"></header>
+<div class="shell">
+  <nav id="sidebar" class="sidebar"></nav>
+  <main class="content">
+    <div class="page-head">
+      <div>
+        <h1 class="page-title">Occupancy &amp; Leases</h1>
+        <p class="subtitle">Which units are occupied and when each lease ends.</p>
+      </div>
+    </div>
+
+    <div id="alert"></div>
+    <!-- Task 43: summary counts (occupied vs vacant) -->
+    <div class="stats" id="summary"></div>
+
+    <div class="card">
+      <div class="filter-bar">
+        <div class="field">
+          <label for="propertyFilter">Property</label>
+          <select id="propertyFilter"><option value="">All properties</option></select>
+        </div>
+        <div class="field">
+          <label for="statusFilter">Unit status</label>
+          <select id="statusFilter"><option value="">All</option><option>Occupied</option><option>Vacant</option></select>
+        </div>
+      </div>
+    </div>
+
+    <!-- Task 42: occupancy table (property, unit, occupied/vacant, lease end date) -->
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Property</th><th>Unit</th><th>Status</th><th>Tenant</th><th class="num">Rent</th><th>Lease start</th><th>Lease end</th><th>Lease status</th></tr></thead>
+        <tbody id="rows"><tr><td colspan="8" class="empty">Loading…</td></tr></tbody>
+      </table>
+    </div>
+  </main>
+</div>
+
+<script src="js/common.js"></script>
+<script>
+  let rows = [];
+
+  function leaseStatus(r) {
+    if (!r.lease_end) return '<span class="muted">—</span>';
+    const days = daysUntil(r.lease_end);
+    if (days < 0) return badge('Expired');
+    if (days <= 60) return `${badge('Ending soon')} <span class="muted small">${days} days</span>`;
+    return badge('Active');
+  }
+
+  function render() {
+    const prop = document.getElementById('propertyFilter').value;
+    const status = document.getElementById('statusFilter').value;
+    const list = rows.filter((r) => (!prop || String(r.property_id) === prop) && (!status || r.status === status));
+    document.getElementById('rows').innerHTML = list.length ? list.map((r) => `<tr>
+      <td><strong>${esc(r.address)}</strong><div class="muted small">${esc(r.city)}</div></td>
+      <td>Unit ${esc(r.unit_number)}</td>
+      <td>${badge(r.status)}</td>
+      <td>${r.tenant_name ? esc(r.tenant_name) : '<span class="muted">—</span>'}</td>
+      <td class="num">${r.monthly_rent ? money(r.monthly_rent) : '—'}</td>
+      <td>${fmtDate(r.lease_start)}</td>
+      <td>${fmtDate(r.lease_end)}</td>
+      <td>${leaseStatus(r)}</td>
+    </tr>`).join('') : emptyRow(8, 'No units to show.');
+  }
+
+  (async () => {
+    await initPage();
+    try {
+      const data = await api('GET', '/api/owner/occupancy');
+      rows = data.rows;
+      const s = data.summary;
+      const rate = s.total ? Math.round((s.occupied / s.total) * 100) : 0;
+      document.getElementById('summary').innerHTML = [
+        ['Total units', s.total], ['Occupied', s.occupied], ['Vacant', s.vacant], ['Occupancy rate', rate + '%'],
+      ].map(([label, value]) => `<div class="stat"><div class="value">${value}</div><div class="label">${label}</div></div>`).join('');
+
+      const props = [...new Map(rows.map((r) => [r.property_id, r.address])).entries()];
+      document.getElementById('propertyFilter').innerHTML += props.map(([id, a]) => `<option value="${id}">${esc(a)}</option>`).join('');
+      render();
+    } catch (err) { showAlert('alert', err.message); }
+  })();
+  ['propertyFilter', 'statusFilter'].forEach((id) => document.getElementById(id).addEventListener('change', render));
+</script>
+</body>
+</html>

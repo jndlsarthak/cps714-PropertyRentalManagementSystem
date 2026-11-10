@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>My Work Orders · PRMS</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<header id="topbar"></header>
+<div class="shell">
+  <nav id="sidebar" class="sidebar"></nav>
+  <main class="content">
+    <div class="page-head">
+      <div>
+        <h1 class="page-title">My Work Orders</h1>
+        <p class="subtitle" id="subtitle">Jobs assigned to you. Submit a quote, then mark the job complete when it is done.</p>
+      </div>
+    </div>
+
+    <div class="tabs" id="tabs"></div>
+    <div id="alert"></div>
+    <!--
+      Tasks 33 & 37: only the work orders assigned to the logged-in staff member / contractor
+      Tasks 34, 35 & 38: quote form (amount, notes) saved to Quotes
+      Tasks 36, 40 & 41: "Mark as Complete" sets status Completed + completion date
+    -->
+    <div id="list"><div class="card empty">Loading…</div></div>
+  </main>
+</div>
+
+<script src="js/common.js"></script>
+<script>
+  let orders = [], filter = 'Assigned', me;
+  const TABS = [['Assigned', 'Open'], ['Completed', 'Completed'], ['', 'All']];
+
+  function quoteSection(o) {
+    const list = o.quotes.length
+      ? `<ul class="quote-list">${o.quotes.map((q) => `<li>
+          <span><strong>${money(q.amount)}</strong>${q.notes ? ` · <span class="muted">${esc(q.notes)}</span>` : ''}</span>
+          <span class="muted small">${fmtDate(q.created_at)}</span></li>`).join('')}</ul>`
+      : '<p class="muted small" style="margin:6px 0 0">You have not submitted a quote yet.</p>';
+    const form = o.status === 'Completed' ? '' : `
+      <form class="panel" data-quote="${o.id}" novalidate>
+        <strong class="small">${o.quotes.length ? 'Submit a revised quote' : 'Submit a quote'}</strong>
+        <div class="grid-3" style="margin-top:8px;grid-template-columns:1fr 2fr">
+          <div class="field">
+            <label>Amount ($)</label>
+            <input name="amount" type="number" min="0.01" step="0.01" placeholder="e.g. 150">
+          </div>
+          <div class="field">
+            <label>Notes <span class="muted">(optional)</span></label>
+            <input name="notes" maxlength="1000" placeholder="Parts, labour, timeline…">
+          </div>
+        </div>
+        <button class="btn sm" type="submit">Submit quote</button>
+      </form>`;
+    return `<div style="margin-top:12px"><strong class="small">My quotes</strong>${list}</div>${form}`;
+  }
+
+  function render() {
+    document.getElementById('tabs').innerHTML = TABS.map(([s, label]) => {
+      const n = s ? orders.filter((o) => o.status === s).length : orders.length;
+      return `<button class="tab ${s === filter ? 'active' : ''}" data-s="${s}">${label} (${n})</button>`;
+    }).join('');
+
+    const list = orders.filter((o) => !filter || o.status === filter);
+    document.getElementById('list').innerHTML = list.length ? list.map((o) => `<div class="card">
+      <div class="card-head">
+        <h3>${esc(o.title)}</h3>
+        <div>${badge(o.urgency)} ${badge(o.status)}</div>
+      </div>
+      <div class="meta">
+        <span>${esc(o.address)}, Unit ${esc(o.unit_number)}, ${esc(o.city)}</span>
+        <span>Tenant: ${esc(o.tenant_name)}</span>
+        <span>Reported ${fmtDate(o.created_at)}</span>
+        <span>Assigned ${fmtDate(o.assigned_at)}</span>
+        ${o.completed_at ? `<span>Completed ${fmtDate(o.completed_at)}</span>` : ''}
+      </div>
+      <p style="margin:0">${esc(o.description)}</p>
+      ${quoteSection(o)}
+      ${o.status === 'Assigned' ? `<div class="form-actions" style="margin-top:14px">
+        <button class="btn success" data-complete="${o.id}">✓ Mark as Complete</button></div>` : ''}
+      ${o.review_rating ? `<div class="panel"><strong class="small">Manager's rating:</strong> ${stars(o.review_rating)}
+        ${o.review_comment ? `<span class="muted small"> · "${esc(o.review_comment)}"</span>` : ''}</div>` : ''}
+    </div>`).join('') : `<div class="card empty">${filter === 'Assigned' ? 'No open work orders. Nice work!' : 'Nothing here yet.'}</div>`;
+  }
+
+  async function load() {
+    orders = (await api('GET', '/api/workorders/mine')).orders;
+    render();
+  }
+
+  document.getElementById('tabs').addEventListener('click', (e) => {
+    const t = e.target.closest('.tab');
+    if (t) { filter = t.dataset.s; render(); }
+  });
+
+  document.getElementById('list').addEventListener('submit', async (e) => {
+    const form = e.target.closest('form[data-quote]');
+    if (!form) return;
+    e.preventDefault();
+    const data = formData(form);
+    if (!setErrors(form, Number(data.amount) > 0 ? {} : { amount: 'Enter an amount greater than 0.' })) return;
+    try {
+      await api('POST', `/api/workorders/${form.dataset.quote}/quote`, data);
+      showAlert('alert', 'Quote submitted. The property manager can now see it.', 'success');
+      await load();
+    } catch (err) { showAlert('alert', err.message); }
+  });
+
+  document.getElementById('list').addEventListener('click', async (e) => {
+    const btn = e.target.closest('button[data-complete]');
+    if (!btn) return;
+    if (!confirm('Mark this work order as complete?')) return;
+    try {
+      await api('POST', `/api/workorders/${btn.dataset.complete}/complete`);
+      showAlert('alert', 'Work order marked as Completed. The completion date was saved.', 'success');
+      await load();
+    } catch (err) { showAlert('alert', err.message); }
+  });
+
+  (async () => {
+    me = await initPage();
+    document.getElementById('subtitle').textContent = me.role === 'contractor'
+      ? 'Contractor jobs assigned to you. Submit a quote, then mark the job complete when finished.'
+      : 'Work orders assigned to you as Maintenance Staff. Submit a quote, then mark them complete.';
+    try { await load(); } catch (err) { showAlert('alert', err.message); }
+  })();
+</script>
+</body>
+</html>

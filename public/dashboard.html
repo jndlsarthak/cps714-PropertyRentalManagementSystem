@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Dashboard · PRMS</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<header id="topbar"></header>
+<div class="shell">
+  <nav id="sidebar" class="sidebar"></nav>
+  <main class="content">
+    <!-- Task 8: role-specific welcome page + menu -->
+    <div class="page-head">
+      <div>
+        <h1 class="page-title" id="welcome">Welcome</h1>
+        <p class="subtitle" id="roleLine"></p>
+      </div>
+    </div>
+    <div id="alert"></div>
+    <div class="stats" id="stats"></div>
+    <h2>Quick actions</h2>
+    <div class="tiles" id="tiles"></div>
+  </main>
+</div>
+
+<script src="js/common.js"></script>
+<script>
+  const DESCRIPTIONS = {
+    'admin-create-user.html': 'Add a new account and assign a role',
+    'admin-users.html': 'View, suspend or re-activate accounts',
+    'admin-listings.html': 'Every listing in the system',
+    'admin-maintenance.html': 'Every maintenance request in the system',
+    'owner-add-property.html': 'Register a property and its units',
+    'owner-properties.html': 'Your properties and who manages them',
+    'owner-occupancy.html': 'Occupied vs vacant units and lease end dates',
+    'owner-spending.html': 'Maintenance spending per property',
+    'manager-listings.html': 'Edit or deactivate your listings',
+    'listing-form.html': 'Publish a listing for a vacant unit',
+    'manager-applications.html': 'Approve or decline applications',
+    'manager-maintenance.html': 'Assign requests and review quotes',
+    'messages.html': 'Conversations with tenants / managers',
+    'listings.html': 'Search by location, price and bedrooms',
+    'my-applications.html': 'Track the status of your applications',
+    'maintenance-new.html': 'Report an issue in your unit',
+    'my-requests.html': 'Track your maintenance requests',
+    'pay.html': 'Pay rent or a deposit online',
+    'payments.html': 'Everything you have paid',
+    'workorders.html': 'Jobs assigned to you: quote & complete',
+  };
+
+  (async () => {
+    const me = await initPage();
+    document.getElementById('welcome').textContent = `Welcome, ${me.name}`;
+    document.getElementById('roleLine').textContent = `You are logged in as ${ROLE_LABELS[me.role]}.`;
+
+    document.getElementById('tiles').innerHTML = visibleMenu(me)
+      .filter((m) => m.href && m.href !== 'dashboard.html')
+      .map((m) => `<a class="tile" href="${m.href}"><strong>${esc(m.label)}</strong><span>${esc(DESCRIPTIONS[m.href] || '')}</span></a>`)
+      .join('');
+
+    try {
+      const { stats } = await api('GET', '/api/dashboard');
+      document.getElementById('stats').innerHTML = stats.map((s) =>
+        `<div class="stat"><div class="value">${esc(s.value)}</div><div class="label">${esc(s.label)}</div></div>`).join('');
+    } catch (err) {
+      showAlert('alert', err.message);
+    }
+  })();
+</script>
+</body>
+</html>

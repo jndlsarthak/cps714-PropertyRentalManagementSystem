@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Log in · PRMS</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div class="login-page">
+  <div class="login-wrap">
+    <!-- Task 6: login page UI -->
+    <div class="login-card">
+      <div class="brand"><span class="brand-logo">P</span><span>PRMS</span></div>
+      <p class="muted" style="text-align:center;margin:0 0 22px">Property Rental Management System</p>
+
+      <div id="alert"></div>
+      <form id="loginForm" novalidate>
+        <div class="field">
+          <label for="email">Email</label>
+          <input id="email" name="email" type="email" autocomplete="username" placeholder="you@example.com">
+        </div>
+        <div class="field">
+          <label for="password">Password</label>
+          <input id="password" name="password" type="password" autocomplete="current-password" placeholder="Your password">
+        </div>
+        <button class="btn block" type="submit" id="loginBtn">Log in</button>
+      </form>
+    </div>
+
+    <div class="demo">
+      <strong>Demo accounts</strong>: click one to fill it in. Password for all: <code>password123</code>
+      <table>
+        <tbody id="demoRows"></tbody>
+      </table>
+      <p style="margin:10px 0 0">Database design: <a href="erd.html">view the ERD</a></p>
+    </div>
+  </div>
+</div>
+
+<script src="js/common.js"></script>
+<script>
+  const DEMO = [
+    ['Admin', 'admin@prms.com'],
+    ['Landlord / Owner', 'owner@prms.com'],
+    ['Owner (self-manages a house)', 'owner2@prms.com'],
+    ['Property Manager', 'manager@prms.com'],
+    ['Tenant', 'tenant@prms.com'],
+    ['Maintenance Staff', 'staff@prms.com'],
+    ['Contractor', 'contractor@prms.com'],
+    ['Suspended user', 'suspended@prms.com'],
+  ];
+  document.getElementById('demoRows').innerHTML = DEMO.map(([role, email]) =>
+    `<tr data-email="${email}"><td>${role}</td><td>${email}</td></tr>`).join('');
+  document.querySelectorAll('#demoRows tr').forEach((tr) => tr.onclick = () => {
+    document.getElementById('email').value = tr.dataset.email;
+    document.getElementById('password').value = 'password123';
+  });
+
+  const form = document.getElementById('loginForm');
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    showAlert('alert', '');
+    const data = formData(form);
+    const errors = {};
+    if (!data.email) errors.email = 'Email is required.';
+    else if (!EMAIL_RE.test(data.email)) errors.email = 'Please enter a valid email.';
+    if (!data.password) errors.password = 'Password is required.';
+    if (!setErrors(form, errors)) return;
+
+    // Task 7: check credentials on the server and start a session
+    await withBusy(document.getElementById('loginBtn'), async () => {
+      try {
+        await api('POST', '/api/login', data);
+        location.href = '/dashboard.html';
+      } catch (err) {
+        showAlert('alert', err.message); // includes the "account suspended" message (Task 48)
+      }
+    });
+  });
+</script>
+</body>
+</html>

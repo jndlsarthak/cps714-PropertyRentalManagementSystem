@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Users · PRMS</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<header id="topbar"></header>
+<div class="shell">
+  <nav id="sidebar" class="sidebar"></nav>
+  <main class="content">
+    <div class="page-head">
+      <div>
+        <h1 class="page-title">Users</h1>
+        <p class="subtitle">All accounts in the system. Suspended users cannot log in.</p>
+      </div>
+      <a class="btn" href="admin-create-user.html">+ Create user</a>
+    </div>
+
+    <div class="card">
+      <div class="filter-bar">
+        <div class="field">
+          <label for="search">Search</label>
+          <input id="search" placeholder="Name or email">
+        </div>
+        <div class="field">
+          <label for="roleFilter">Role</label>
+          <select id="roleFilter"><option value="">All roles</option></select>
+        </div>
+        <div class="field">
+          <label for="statusFilter">Status</label>
+          <select id="statusFilter">
+            <option value="">All</option><option>Active</option><option>Suspended</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <div id="alert"></div>
+    <!-- Task 44: users table (name, role, status) + Task 47: Suspend/Activate -->
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Status</th><th>Created</th><th>Action</th></tr></thead>
+        <tbody id="rows"><tr><td colspan="6" class="empty">Loading…</td></tr></tbody>
+      </table>
+    </div>
+  </main>
+</div>
+
+<script src="js/common.js"></script>
+<script>
+  let me, users = [];
+  const roleFilter = document.getElementById('roleFilter');
+  roleFilter.innerHTML += Object.entries(ROLE_LABELS).map(([v, l]) => `<option value="${v}">${l}</option>`).join('');
+
+  function render() {
+    const q = document.getElementById('search').value.trim().toLowerCase();
+    const role = roleFilter.value;
+    const status = document.getElementById('statusFilter').value;
+    const list = users.filter((u) =>
+      (!q || u.name.toLowerCase().includes(q) || u.email.toLowerCase().includes(q)) &&
+      (!role || u.role === role) && (!status || u.status === status));
+
+    document.getElementById('rows').innerHTML = list.length ? list.map((u) => {
+      const isMe = u.id === me.id;
+      const action = isMe ? '<span class="muted small">This is you</span>'
+        : u.status === 'Active'
+          ? `<button class="btn danger sm" data-id="${u.id}" data-status="Suspended">Suspend</button>`
+          : `<button class="btn success sm" data-id="${u.id}" data-status="Active">Activate</button>`;
+      return `<tr>
+        <td><strong>${esc(u.name)}</strong></td>
+        <td>${esc(u.email)}</td>
+        <td>${esc(ROLE_LABELS[u.role])}</td>
+        <td>${badge(u.status)}</td>
+        <td>${fmtDate(u.created_at)}</td>
+        <td class="actions">${action}</td>
+      </tr>`;
+    }).join('') : emptyRow(6, 'No users match your filters.');
+  }
+
+  async function load() {
+    users = (await api('GET', '/api/users')).users;
+    render();
+  }
+
+  document.getElementById('rows').addEventListener('click', async (e) => {
+    const btn = e.target.closest('button[data-id]');
+    if (!btn) return;
+    const user = users.find((u) => u.id === Number(btn.dataset.id));
+    const status = btn.dataset.status;
+    const verb = status === 'Suspended' ? 'suspend' : 'activate';
+    if (!confirm(`Are you sure you want to ${verb} ${user.name}?`)) return;
+    try {
+      await api('POST', `/api/users/${user.id}/status`, { status });
+      showAlert('alert', `${user.name} is now ${status}.`, 'success');
+      await load();
+    } catch (err) {
+      showAlert('alert', err.message);
+    }
+  });
+
+  ['search', 'roleFilter', 'statusFilter'].forEach((id) => document.getElementById(id).addEventListener('input', render));
+
+  (async () => {
+    me = await initPage();
+    try { await load(); } catch (err) { showAlert('alert', err.message); }
+  })();
+</script>
+</body>
+</html>

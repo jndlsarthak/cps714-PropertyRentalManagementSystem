@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Applications · PRMS</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<header id="topbar"></header>
+<div class="shell">
+  <nav id="sidebar" class="sidebar"></nav>
+  <main class="content">
+    <div class="page-head">
+      <div>
+        <h1 class="page-title">Applications</h1>
+        <p class="subtitle">Rental applications for your listings. Approving one creates a lease and marks the unit Occupied.</p>
+      </div>
+    </div>
+
+    <div class="tabs" id="tabs"></div>
+    <div id="alert"></div>
+    <!-- Task 21: applications list; Task 22: Approve/Decline -->
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Applicant</th><th>Listing</th><th class="num">Monthly income</th><th>Employer</th><th>Move-in</th><th>Message</th><th>Status</th><th>Actions</th></tr></thead>
+        <tbody id="rows"><tr><td colspan="8" class="empty">Loading…</td></tr></tbody>
+      </table>
+    </div>
+  </main>
+</div>
+
+<script src="js/common.js"></script>
+<script>
+  let apps = [], filter = 'Pending';
+  const STATUSES = ['Pending', 'Approved', 'Declined', ''];
+
+  function render() {
+    document.getElementById('tabs').innerHTML = STATUSES.map((s) => {
+      const n = s ? apps.filter((a) => a.status === s).length : apps.length;
+      return `<button class="tab ${s === filter ? 'active' : ''}" data-s="${s}">${s || 'All'} (${n})</button>`;
+    }).join('');
+
+    const list = apps.filter((a) => !filter || a.status === filter);
+    document.getElementById('rows').innerHTML = list.length ? list.map((a) => {
+      const ratio = a.income / a.rent;
+      const actions = a.status === 'Pending'
+        ? `<button class="btn success sm" data-id="${a.id}" data-d="Approved">Approve</button>
+           <button class="btn danger sm" data-id="${a.id}" data-d="Declined">Decline</button>`
+        : `<span class="muted small">${fmtDate(a.decided_at)}</span>`;
+      return `<tr>
+        <td><strong>${esc(a.tenant_name)}</strong><div class="muted small">${esc(a.tenant_email)}</div>
+            <a class="small" href="messages.html?with=${a.tenant_id}">Message</a></td>
+        <td>${esc(a.address)}<div class="muted small">Unit ${esc(a.unit_number)} · ${money(a.rent)}/mo</div></td>
+        <td class="num">${money(a.income)}<div class="small ${ratio >= 3 ? 'muted' : ''}" style="${ratio < 3 ? 'color:var(--warning)' : ''}">${ratio.toFixed(1)}× rent</div></td>
+        <td>${esc(a.employer)}</td>
+        <td>${fmtDate(a.move_in_date)}</td>
+        <td style="max-width:240px" class="small">${esc(a.message || '—')}</td>
+        <td>${badge(a.status)}<div class="muted small">Applied ${fmtDate(a.created_at)}</div></td>
+        <td class="actions">${actions}</td>
+      </tr>`;
+    }).join('') : emptyRow(8, filter ? `No ${filter.toLowerCase()} applications.` : 'No applications yet.');
+  }
+
+  async function load() {
+    apps = (await api('GET', '/api/applications/managed')).applications;
+    render();
+  }
+
+  document.getElementById('tabs').addEventListener('click', (e) => {
+    const t = e.target.closest('.tab');
+    if (t) { filter = t.dataset.s; render(); }
+  });
+
+  document.getElementById('rows').addEventListener('click', async (e) => {
+    const btn = e.target.closest('button[data-id]');
+    if (!btn) return;
+    const app = apps.find((a) => a.id === Number(btn.dataset.id));
+    const decision = btn.dataset.d;
+    const question = decision === 'Approved'
+      ? `Approve ${app.tenant_name}'s application?\n\nThis creates a 12-month lease, marks Unit ${app.unit_number} as Occupied, and declines any other pending applications for this listing.`
+      : `Decline ${app.tenant_name}'s application?`;
+    if (!confirm(question)) return;
+    try {
+      await api('POST', `/api/applications/${app.id}/decision`, { decision });   // Task 23 runs on the server
+      showAlert('alert', decision === 'Approved'
+        ? `Approved. A lease was created for ${app.tenant_name} and the unit is now Occupied.`
+        : 'Application declined.', 'success');
+      await load();
+    } catch (err) { showAlert('alert', err.message); }
+  });
+
+  (async () => {
+    await initPage();
+    try { await load(); } catch (err) { showAlert('alert', err.message); }
+  })();
+</script>
+</body>
+</html>

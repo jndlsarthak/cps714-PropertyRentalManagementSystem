@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Pay Rent / Deposit · PRMS</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<header id="topbar"></header>
+<div class="shell">
+  <nav id="sidebar" class="sidebar"></nav>
+  <main class="content">
+    <div class="page-head">
+      <div>
+        <h1 class="page-title">Pay Rent / Deposit</h1>
+        <p class="subtitle">Online payment (simulated, so no real card is charged).</p>
+      </div>
+      <a class="btn secondary" href="payments.html">Payment history</a>
+    </div>
+
+    <!-- Task 57: payment page (amount, type, fake card form) -->
+    <div class="card narrow">
+      <div id="alert"></div>
+      <div id="receipt"></div>
+      <form id="payForm" novalidate hidden>
+        <div class="field">
+          <label for="lease_id">Lease</label>
+          <select id="lease_id" name="lease_id"></select>
+        </div>
+        <div class="grid-2">
+          <div class="field">
+            <label for="type">Payment type</label>
+            <select id="type" name="type">
+              <option value="Rent">Rent</option>
+              <option value="Deposit">Deposit</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="amount">Amount ($)</label>
+            <input id="amount" name="amount" type="number" min="1" step="0.01">
+          </div>
+        </div>
+        <div class="hint" id="leaseInfo" style="margin:-6px 0 14px"></div>
+
+        <hr class="divider">
+        <div class="alert info small">Test mode: use any 16-digit card number, e.g. <code>4242 4242 4242 4242</code>, a future expiry and any CVV.</div>
+        <div class="field">
+          <label for="card_name">Name on card</label>
+          <input id="card_name" name="card_name" autocomplete="cc-name">
+        </div>
+        <div class="field">
+          <label for="card_number">Card number</label>
+          <input id="card_number" name="card_number" inputmode="numeric" autocomplete="cc-number" maxlength="19" placeholder="1234 5678 9012 3456">
+        </div>
+        <div class="grid-2">
+          <div class="field">
+            <label for="expiry">Expiry (MM/YY)</label>
+            <input id="expiry" name="expiry" autocomplete="cc-exp" maxlength="5" placeholder="MM/YY">
+          </div>
+          <div class="field">
+            <label for="cvv">CVV</label>
+            <input id="cvv" name="cvv" inputmode="numeric" autocomplete="cc-csc" maxlength="4" placeholder="123">
+          </div>
+        </div>
+        <button class="btn block" type="submit" id="payBtn">Pay now</button>
+      </form>
+    </div>
+  </main>
+</div>
+
+<script src="js/common.js"></script>
+<script>
+  const form = document.getElementById('payForm');
+  let leases = [];
+
+  function updateAmount() {
+    const lease = leases.find((l) => String(l.id) === form.lease_id.value);
+    if (!lease) return;
+    form.amount.value = form.type.value === 'Deposit' ? lease.deposit : lease.monthly_rent;
+    document.getElementById('leaseInfo').innerHTML =
+      `Monthly rent ${money(lease.monthly_rent)} · Deposit ${money(lease.deposit)} ` +
+      (lease.deposit_paid >= lease.deposit ? '(deposit already paid)' : `(deposit paid so far: ${money(lease.deposit_paid)})`);
+  }
+
+  // Format the card number in groups of 4 as the user types
+  form.card_number.addEventListener('input', () => {
+    form.card_number.value = form.card_number.value.replace(/\D/g, '').slice(0, 16).replace(/(\d{4})(?=\d)/g, '$1 ');
+  });
+  form.expiry.addEventListener('input', () => {
+    const v = form.expiry.value.replace(/\D/g, '').slice(0, 4);
+    form.expiry.value = v.length > 2 ? v.slice(0, 2) + '/' + v.slice(2) : v;
+  });
+  form.lease_id.addEventListener('change', updateAmount);
+  form.type.addEventListener('change', updateAmount);
+
+  (async () => {
+    const me = await initPage();
+    form.card_name.value = me.name;
+    try {
+      leases = (await api('GET', '/api/tenant/leases')).leases;
+      if (!leases.length) return showAlert('alert', 'You need an active lease before you can make payments.', 'info');
+      form.lease_id.innerHTML = leases.map((l) => `<option value="${l.id}">${esc(l.address)}, Unit ${esc(l.unit_number)}</option>`).join('');
+      form.hidden = false;
+      updateAmount();
+    } catch (err) { showAlert('alert', err.message); }
+  })();
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    showAlert('alert', '');
+    const data = formData(form);
+    const errors = {};
+    if (!data.amount || Number(data.amount) <= 0) errors.amount = 'Enter an amount greater than 0.';
+    if (!data.card_name) errors.card_name = 'Name on card is required.';
+    if (!/^\d{16}$/.test(data.card_number.replace(/\s/g, ''))) errors.card_number = 'Card number must be 16 digits.';
+    const m = /^(\d{2})\/(\d{2})$/.exec(data.expiry);
+    if (!m || +m[1] < 1 || +m[1] > 12) errors.expiry = 'Use the MM/YY format.';
+    else if (new Date(2000 + +m[2], +m[1], 0, 23, 59) < new Date()) errors.expiry = 'This card has expired.';
+    if (!/^\d{3,4}$/.test(data.cvv)) errors.cvv = 'CVV must be 3 or 4 digits.';
+    if (!setErrors(form, errors)) return;
+
+    await withBusy(document.getElementById('payBtn'), async () => {
+      try {
+        // Task 58: saved to Payments with status "Paid" (simulated, no gateway)
+        const { payment } = await api('POST', '/api/payments', data);
+        form.card_number.value = form.expiry.value = form.cvv.value = '';
+        document.getElementById('receipt').innerHTML = `<div class="alert success">
+          <strong>Payment successful</strong><br>
+          ${money(payment.amount)} ${esc(payment.type.toLowerCase())} paid with card ending ${esc(payment.card_last4)}.<br>
+          Reference: <code>${esc(payment.reference)}</code> · <a href="payments.html">View payment history</a></div>`;
+        leases = (await api('GET', '/api/tenant/leases')).leases;
+        updateAmount();
+      } catch (err) { showAlert('alert', err.message); }
+    });
+  });
+</script>
+</body>
+</html>

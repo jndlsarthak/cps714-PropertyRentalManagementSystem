@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>My Properties · PRMS</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<header id="topbar"></header>
+<div class="shell">
+  <nav id="sidebar" class="sidebar"></nav>
+  <main class="content">
+    <div class="page-head">
+      <div>
+        <h1 class="page-title">My Properties</h1>
+        <p class="subtitle">Your registered properties and who manages each one.</p>
+      </div>
+      <a class="btn" href="owner-add-property.html">+ Add property</a>
+    </div>
+
+    <div id="alert"></div>
+    <!-- Task 11: "My Properties" list page -->
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Address</th><th>City</th><th>Type</th><th>Units</th><th>Occupied</th><th>Managed by</th><th>Added</th></tr></thead>
+        <tbody id="rows"><tr><td colspan="7" class="empty">Loading…</td></tr></tbody>
+      </table>
+    </div>
+  </main>
+</div>
+
+<script src="js/common.js"></script>
+<script>
+  let managers = [];
+
+  function managerSelect(p) {
+    const options = [`<option value="self" ${p.manager_id ? '' : 'selected'}>Manage myself</option>`]
+      .concat(managers.map((m) => `<option value="${m.id}" ${m.id === p.manager_id ? 'selected' : ''}>${esc(m.name)}</option>`));
+    return `<select data-id="${p.id}" aria-label="Manager for ${esc(p.address)}">${options.join('')}</select>`;
+  }
+
+  async function load() {
+    const { properties } = await api('GET', '/api/properties/mine');
+    document.getElementById('rows').innerHTML = properties.length ? properties.map((p) => `<tr>
+      <td><strong>${esc(p.address)}</strong></td>
+      <td>${esc(p.city)}</td>
+      <td>${esc(p.type)}</td>
+      <td>${p.num_units}</td>
+      <td>${p.occupied} / ${p.num_units}</td>
+      <td style="min-width:190px">${managerSelect(p)}</td>
+      <td>${fmtDate(p.created_at)}</td>
+    </tr>`).join('') : emptyRow(7, 'You have not added any properties yet.');
+  }
+
+  // Change who manages a property
+  document.getElementById('rows').addEventListener('change', async (e) => {
+    const select = e.target.closest('select[data-id]');
+    if (!select) return;
+    try {
+      await api('POST', `/api/properties/${select.dataset.id}/manager`, { manager_id: select.value });
+      showAlert('alert', 'Manager updated.', 'success');
+      // the "Self-managed" menu may need to appear/disappear
+      renderLayout((await api('GET', '/api/me')).user);
+    } catch (err) {
+      showAlert('alert', err.message);
+      load();
+    }
+  });
+
+  (async () => {
+    await initPage();
+    showFlash('alert');
+    try {
+      managers = (await api('GET', '/api/managers')).managers;
+      await load();
+    } catch (err) { showAlert('alert', err.message); }
+  })();
+</script>
+</body>
+</html>
